@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>E-Commerce SPA</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="bg-light">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const API_BASE = "http://localhost:4000"; // change to Render URL after deploy
+
+    const storage = {
+      getToken: () => localStorage.getItem("token"),
+      setToken: (t) => localStorage.setItem("token", t),
+      clearToken: () => localStorage.removeItem("token"),
+    };
+
+    async function api(path, { method="GET", body, auth=false } = {}) {
+      const headers = { "Content-Type": "application/json" };
+      if (auth && storage.getToken()) headers.Authorization = "Bearer " + storage.getToken();
+      const res = await fetch(API_BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      if (!res.ok) throw new Error((await res.json()).message || "Request failed");
+      return res.json();
+    }
+
+    function Navbar({ user, cart, setView, logout }) {
+      const cartCount = Object.values(cart).reduce((a,b)=>a+b,0);
+      return (
+        <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
+          <div className="container">
+            <a className="navbar-brand" href="#" onClick={()=>setView("list")}>Shop</a>
+            <div className="ms-auto d-flex">
+              {user ? (
+                <>
+                  <span className="navbar-text text-white me-3">{user.email}</span>
+                  <button className="btn btn-outline-light me-2" onClick={()=>setView("cart")}>Cart ({cartCount})</button>
+                  <button className="btn btn-danger" onClick={logout}>Logout</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn btn-outline-light me-2" onClick={()=>setView("login")}>Login</button>
+                  <button className="btn btn-outline-light" onClick={()=>setView("signup")}>Sign up</button>
+                </>
+              )}
+            </div>
+          </div>
+        </nav>
+      );
+    }
+
+    function AuthForm({ mode="login", onAuthed }) {
+      const [email, setEmail] = React.useState("");
+      const [password, setPassword] = React.useState("");
+      const [error, setError] = React.useState("");
+      const isLogin = mode === "login";
+
+      async function submit(e) {
+        e.preventDefault();
+        setError("");
+        try {
+          const data = await api(`/auth/${isLogin ? "login" : "signup"}`, { method:"POST", body:{ email, password } });
+          storage.setToken(data.token);
+          onAuthed(data.user);
+        } catch(e) { setError(e.message); }
+      }
+
+      return (
+        <div className="container mt-5" style={{maxWidth:"400px"}}>
+          <div className="card p-4 shadow">
+            <h3 className="mb-3">{isLogin ? "Login" : "Sign Up"}</h3>
+            <form onSubmit={submit}>
+              <input className="form-control mb-2" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
+              <input type="password" className="form-control mb-2" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} />
+              {error && <div className="text-danger small mb-2">{error}</div>}
+              <button className="btn btn-primary w-100">{isLogin ? "Login" : "Create Account"}</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function Listing({ onAddToCart }) {
+      const [items, setItems] = React.useState([]);
+      const [filters, setFilters] = React.useState({q:"", minPrice:"", maxPrice:""});
+      const [error, setError] = React.useState("");
+
+      async function load() {
+        setError("");
+        try {
+          const params = new URLSearchParams(filters);
+          const data = await api("/items" + (params.toString() ? ("?" + params.toString()) : ""));
+          setItems(data);
+        } catch(e){ setError(e.message); }
+      }
+
+      React.useEffect(()=>{ load(); }, []);
+
+      return (
+        <div className="container my-4">
+          <div className="row mb-3">
+            <div className="col"><input className="form-control" placeholder="Search" value={filters.q} onChange={e=>setFilters({...filters,q:e.target.value})}/></div>
+            <div className="col"><input className="form-control" placeholder="Min Price" value={filters.minPrice} onChange={e=>setFilters({...filters,minPrice:e.target.value})}/></div>
+            <div className="col"><input className="form-control" placeholder="Max Price" value={filters.maxPrice} onChange={e=>setFilters({...filters,maxPrice:e.target.value})}/></div>
+            <div className="col"><button className="btn btn-primary w-100" onClick={load}>Filter</button></div>
+          </div>
+          {error && <div className="text-danger">{error}</div>}
+          <div className="row">
+            {items.map(item => (
+              <div key={item.id} className="col-md-4 mb-3">
+                <div className="card h-100 shadow-sm">
+                  <img src={item.image || `https://picsum.photos/seed/${item.id}/400/300`} className="card-img-top" alt="" />
+                  <div className="card-body d-flex flex-column">
+                    <h5 className="card-title">{item.title}</h5>
+                    <p className="card-text text-muted">${item.price.toFixed(2)}</p>
+                    <button className="btn btn-dark mt-auto" onClick={()=>onAddToCart(item.id)}>Add to Cart</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function Cart({ cart, items, onInc, onDec, onRemove }) {
+      const entries = Object.entries(cart);
+      const findItem = id => items.find(i=>i.id===id);
+      const total = entries.reduce((sum,[id,qty])=>{
+        const item = findItem(id);
+        return sum + (item ? item.price * qty : 0);
+      },0);
+
+      return (
+        <div className="container my-4">
+          <h3>Your Cart</h3>
+          {entries.length === 0 ? (
+            <p className="text-muted">Your cart is empty</p>
+          ) : (
+            <ul className="list-group">
+              {entries.map(([id,qty])=>{
+                const item = findItem(id);
+                if (!item) return null;
+                return (
+                  <li key={id} className="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{item.title}</strong> <span className="text-muted">(${item.price.toFixed(2)})</span>
+                    </div>
+                    <div className="d-flex align-items-center">
+                      <button className="btn btn-outline-secondary btn-sm me-1" onClick={()=>onDec(id)}>-</button>
+                      <span>{qty}</span>
+                      <button className="btn btn-outline-secondary btn-sm ms-1" onClick={()=>onInc(id)}>+</button>
+                      <button className="btn btn-danger btn-sm ms-3" onClick={()=>onRemove(id)}>Remove</button>
+                    </div>
+                  </li>
+                );
+              })}
+              <li className="list-group-item text-end fw-bold">Total: ${total.toFixed(2)}</li>
+            </ul>
+          )}
+        </div>
+      );
+    }
+
+    function App() {
+      const [view,setView] = React.useState("login");
+      const [user,setUser] = React.useState(null);
+      const [items,setItems] = React.useState([]);
+      const [cart,setCart] = React.useState({});
+
+      React.useEffect(()=>{ api("/items").then(setItems).catch(()=>{}); },[]);
+      React.useEffect(()=>{ if(user) api("/cart",{auth:true}).then(setCart).catch(()=>{}); },[user]);
+
+      const addToCart = async (id)=>{ try{ const data = await api("/cart",{method:"POST",body:{itemId:id,qty:1},auth:true}); setCart(data); setView("cart"); }catch{ setView("login"); } };
+      const inc = async id => { const data = await api("/cart",{method:"PATCH",body:{itemId:id,qty:(cart[id]||0)+1},auth:true}); setCart(data); };
+      const dec = async id => { const data = await api("/cart",{method:"PATCH",body:{itemId:id,qty:Math.max(0,(cart[id]||0)-1)},auth:true}); setCart(data); };
+      const remove = async id => { const data = await api("/cart/"+id,{method:"DELETE",auth:true}); setCart(data); };
+      const logout = ()=>{ storage.clearToken(); setUser(null); setCart({}); setView("login"); };
+
+      return (
+        <>
+          <Navbar user={user} cart={cart} setView={setView} logout={logout}/>
+          {view==="login" && <AuthForm mode="login" onAuthed={(u)=>{setUser(u); setView("list");}}/>}
+          {view==="signup" && <AuthForm mode="signup" onAuthed={(u)=>{setUser(u); setView("list");}}/>}
+          {view==="list" && <Listing onAddToCart={addToCart}/>}
+          {view==="cart" && <Cart cart={cart} items={items} onInc={inc} onDec={dec} onRemove={remove}/>}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
