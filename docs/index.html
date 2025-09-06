@@ -38,16 +38,16 @@
             <a className="navbar-brand" href="#" onClick={()=>setView("list")}>Shop</a>
             <div className="ms-auto d-flex">
               {user ? (
-                <>
+                <div>
                   <span className="navbar-text text-white me-3">{user.email}</span>
                   <button className="btn btn-outline-light me-2" onClick={()=>setView("cart")}>Cart ({cartCount})</button>
                   <button className="btn btn-danger" onClick={logout}>Logout</button>
-                </>
+                </div>
               ) : (
-                <>
+                <div>
                   <button className="btn btn-outline-light me-2" onClick={()=>setView("login")}>Login</button>
                   <button className="btn btn-outline-light" onClick={()=>setView("signup")}>Sign up</button>
-                </>
+                </div>
               )}
             </div>
           </div>
