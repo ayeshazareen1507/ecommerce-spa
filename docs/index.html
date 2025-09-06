@@ -184,13 +184,13 @@
       const logout = ()=>{ storage.clearToken(); setUser(null); setCart({}); setView("login"); };
 
       return (
-        <>
+        <div>
           <Navbar user={user} cart={cart} setView={setView} logout={logout}/>
           {view==="login" && <AuthForm mode="login" onAuthed={(u)=>{setUser(u); setView("list");}}/>}
           {view==="signup" && <AuthForm mode="signup" onAuthed={(u)=>{setUser(u); setView("list");}}/>}
           {view==="list" && <Listing onAddToCart={addToCart}/>}
           {view==="cart" && <Cart cart={cart} items={items} onInc={inc} onDec={dec} onRemove={remove}/>}
-        </>
+        </div>
       );
     }
 
